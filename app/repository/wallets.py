@@ -1,6 +1,5 @@
 from decimal import Decimal
 from sqlalchemy.orm import Session
-
 from app.currency_enum import CurrencyEnum
 from app.models import Wallet, User
 
