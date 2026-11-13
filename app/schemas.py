@@ -89,3 +89,17 @@ class TransferCreateSchema(BaseModel):
             raise ValueError("Amount cannot be negative")
 
         return v
+
+class RegisterRequest(BaseModel):
+    login: str = Field(...,min_length=3,max_length=127)
+    password: str = Field(...,min_length=8,max_length=128)
+
+class LoginRequest(BaseModel):
+    login: str
+    password: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+

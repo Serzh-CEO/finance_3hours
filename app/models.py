@@ -10,6 +10,7 @@ class User(Base):
     __tablename__ = "user"
     id: Mapped[int] = mapped_column(primary_key=True)
     login: Mapped[str] = mapped_column(unique=True)
+    hashed_password: Mapped[str]
 
 class Wallet(Base):
     __tablename__ = "wallet"
