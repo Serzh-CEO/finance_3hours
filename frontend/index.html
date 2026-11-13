@@ -23,8 +23,8 @@ table{width:100%;border-collapse:collapse}td,th{padding:7px 6px;text-align:left;
 .hide{display:none!important}
 </style></head><body>
 <div id="login" class="card"><h3>Sign in</h3>
- <p class="mu">Enter an existing login or create a new user.</p>
- <form onsubmit="return login(event)"><input id="lg" placeholder="login" required>
+ <p class="mu">Sign in, or create an account (password: min 8 characters).</p>
+ <form onsubmit="return login(event)"><input id="lg" placeholder="login" required><input id="pw" type="password" placeholder="password" minlength="8" required>
  <div class="row"><button>Sign in</button><button type="button" class="g" onclick="register()">Create</button></div></form></div>
 
 <div id="app" class="hide">
@@ -59,15 +59,20 @@ table{width:100%;border-collapse:collapse}td,th{padding:7px 6px;text-align:left;
 <div id="toast"></div>
 <script>
 const API=location.protocol==='file:'?'http://127.0.0.1:8000/api/v1':'/api/v1';
-const $=id=>document.getElementById(id);let U=localStorage.getItem('u'),W=[],ch={};
-async function api(p,o={}){const r=await fetch(API+p,{...o,headers:{'Content-Type':'application/json',Authorization:'Bearer '+U}});
- const d=await r.json().catch(()=>null);if(!r.ok){throw new Error(typeof d?.detail==='string'?d.detail:JSON.stringify(d?.detail||r.status))}return d}
+const $=id=>document.getElementById(id);let T=localStorage.getItem('t'),U='',W=[],ch={};
+async function api(p,o={}){const r=await fetch(API+p,{...o,headers:{'Content-Type':'application/json',...(T&&{Authorization:'Bearer '+T})}});
+ const d=await r.json().catch(()=>null);
+ if(r.status===401&&!p.startsWith('/auth/')){logout();throw new Error('Session expired')}
+ if(!r.ok){const m=Array.isArray(d?.detail)?d.detail[0].msg:d?.detail;throw new Error(typeof m==='string'?m:r.status)}return d}
 function toast(m,e){const t=$('toast');t.textContent=m;t.style.background=e?'var(--ex)':'var(--in)';t.style.display='block';setTimeout(()=>t.style.display='none',3000)}
 const fmt=(n,c='')=>Number(n).toLocaleString('en-US',{maximumFractionDigits:2})+(c?' '+c.toUpperCase():'');
-async function login(e){e.preventDefault();U=$('lg').value.trim();try{await api('/users/me');localStorage.setItem('u',U);start()}catch(x){toast('User not found',1)}return false}
-async function register(){U=$('lg').value.trim();if(!U)return;try{await api('/users',{method:'POST',body:JSON.stringify({login:U})});localStorage.setItem('u',U);start()}catch(x){toast(x.message,1)}}
-function logout(){localStorage.removeItem('u');location.reload()}
-async function start(){$('login').classList.add('hide');$('app').classList.remove('hide');$('who').textContent=U;await loadWallets();loadTotal();loadOps()}
+const creds=()=>JSON.stringify({login:$('lg').value.trim(),password:$('pw').value});
+async function login(e){e.preventDefault();
+ try{const d=await api('/auth/login',{method:'POST',body:creds()});T=d.access_token;localStorage.setItem('t',T);await start()}catch(x){toast(x.message,1)}return false}
+async function register(){
+ try{await api('/users',{method:'POST',body:creds()});toast('Account created, now sign in')}catch(x){toast(x.message,1)}}
+function logout(){localStorage.removeItem('t');location.reload()}
+async function start(){U=(await api('/users/me')).login;$('login').classList.add('hide');$('app').classList.remove('hide');$('who').textContent=U;await loadWallets();loadTotal();loadOps()}
 async function loadWallets(){W=await api('/wallets');
  $('wallets').innerHTML=W.map(w=>`<div class="w"><span>${w.name}</span><b>${fmt(w.balance,w.currency)}</b></div>`).join('')||'<span class="mu">No wallets</span>';
  document.querySelectorAll('.wsel').forEach(s=>s.innerHTML=W.map(w=>`<option>${w.name}</option>`).join(''));
@@ -91,5 +96,5 @@ async function mk(e,k){e.preventDefault();const f=Object.fromEntries(new FormDat
  else if(k==='op')await api('/operations/'+f.kind,{method:'POST',body:JSON.stringify({wallet_name:f.wallet_name,amount:f.amount,description:f.description||null})});
  else await api('/operations/transfer',{method:'POST',body:JSON.stringify({from_wallet_id:+f.from_wallet_id,to_wallet_id:+f.to_wallet_id,amount:f.amount})});
  toast('Done');e.target.reset();await loadWallets();loadTotal();loadOps()}catch(x){toast(x.message,1)}return false}
-if(U)api('/users/me').then(start).catch(()=>localStorage.removeItem('u'));
+if(T)start().catch(()=>{});
 </script></body></html>
