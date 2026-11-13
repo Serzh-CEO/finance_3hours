@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Make Your Finance Easy</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#f5f6fa;--card:#fff;--tx:#1f2430;--mu:#7a8194;--bd:#e4e7ef;--ac:#4f6ef7;--in:#1fa971;--ex:#e5484d}
+@media(prefers-color-scheme:dark){:root{--bg:#11141b;--card:#1a1f2a;--tx:#e8ebf2;--mu:#8b93a7;--bd:#2a3140}}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{display:flex;justify-content:space-between;align-items:center;padding:14px 24px;background:var(--card);border-bottom:1px solid var(--bd)}
+main{max-width:1100px;margin:auto;padding:20px;display:grid;gap:16px}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px}
+h3{margin:0 0 12px;font-size:13px;color:var(--mu);text-transform:uppercase;letter-spacing:.04em}
+.big{font-size:30px;font-weight:700}.mu{color:var(--mu)}
+input,select,button{font:inherit;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx)}
+button{background:var(--ac);color:#fff;border:0;cursor:pointer}button.g{background:var(--bg);color:var(--tx);border:1px solid var(--bd)}
+form{display:grid;gap:8px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.w{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bd)}.w:last-child{border:0}
+table{width:100%;border-collapse:collapse}td,th{padding:7px 6px;text-align:left;border-bottom:1px solid var(--bd)}th{color:var(--mu);font-weight:500}
+.income{color:var(--in)}.expense{color:var(--ex)}.transfer{color:var(--ac)}
+#toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:8px;color:#fff;display:none}
+#login{max-width:340px;margin:12vh auto}
+.hide{display:none!important}
+</style></head><body>
+<div id="login" class="card"><h3>Sign in</h3>
+ <p class="mu">Enter an existing login or create a new user.</p>
+ <form onsubmit="return login(event)"><input id="lg" placeholder="login" required>
+ <div class="row"><button>Sign in</button><button type="button" class="g" onclick="register()">Create</button></div></form></div>
+
+<div id="app" class="hide">
+<header><b>Make Your Finance Easy</b><div class="row"><span class="mu" id="who"></span><button class="g" onclick="logout()">Log out</button></div></header>
+<main>
+ <div class="grid">
+  <div class="card"><h3>Total balance <select id="cur" onchange="loadTotal()"><option>kzt</option><option>usd</option><option>eur</option><option>rub</option></select></h3>
+   <div class="big" id="total">—</div><div class="mu">converted using backend exchange rates</div></div>
+  <div class="card"><h3>Income / Expenses</h3><div class="big"><span class="income" id="sIn">0</span> / <span class="expense" id="sEx">0</span></div><div class="mu">for the selected period</div></div>
+  <div class="card"><h3>Wallets</h3><div id="wallets"></div></div>
+ </div>
+ <div class="grid">
+  <div class="card"><h3>Daily activity</h3><canvas id="c1" height="200"></canvas></div>
+  <div class="card"><h3>Expenses by category</h3><canvas id="c2" height="200"></canvas></div>
+ </div>
+ <div class="grid">
+  <div class="card"><h3>New wallet</h3><form onsubmit="return mk(event,'wallet')">
+   <input name="name" placeholder="Name" required><input name="initial_balance" type="number" step="0.01" min="0" placeholder="Initial balance">
+   <select name="currency"><option>kzt</option><option>usd</option><option>eur</option><option>rub</option></select><button>Create</button></form></div>
+  <div class="card"><h3>Income / Expense</h3><form onsubmit="return mk(event,'op')">
+   <select name="wallet_name" class="wsel"></select><input name="amount" type="number" step="0.01" min="0.01" placeholder="Amount" required>
+   <input name="description" placeholder="Category / description"><select name="kind"><option value="income">Income</option><option value="expense">Expense</option></select><button>Add</button></form></div>
+  <div class="card"><h3>Transfer</h3><form onsubmit="return mk(event,'tr')">
+   <select name="from_wallet_id" class="wid"></select><select name="to_wallet_id" class="wid"></select>
+   <input name="amount" type="number" step="0.01" min="0.01" placeholder="Amount" required><button>Transfer</button></form></div>
+ </div>
+ <div class="card"><h3>Operations</h3>
+  <div class="row" style="margin-bottom:10px"><select id="fw" onchange="loadOps()"><option value="">All wallets</option></select>
+   <input type="date" id="df" onchange="loadOps()"><input type="date" id="dt" onchange="loadOps()"><button class="g" onclick="df.value=dt.value='';loadOps()">Reset</button></div>
+  <table><thead><tr><th>Date</th><th>Wallet</th><th>Type</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody id="ops"></tbody></table></div>
+</main></div>
+<div id="toast"></div>
+<script>
+const API=location.protocol==='file:'?'http://127.0.0.1:8000/api/v1':'/api/v1';
+const $=id=>document.getElementById(id);let U=localStorage.getItem('u'),W=[],ch={};
+async function api(p,o={}){const r=await fetch(API+p,{...o,headers:{'Content-Type':'application/json',Authorization:'Bearer '+U}});
+ const d=await r.json().catch(()=>null);if(!r.ok){throw new Error(typeof d?.detail==='string'?d.detail:JSON.stringify(d?.detail||r.status))}return d}
+function toast(m,e){const t=$('toast');t.textContent=m;t.style.background=e?'var(--ex)':'var(--in)';t.style.display='block';setTimeout(()=>t.style.display='none',3000)}
+const fmt=(n,c='')=>Number(n).toLocaleString('en-US',{maximumFractionDigits:2})+(c?' '+c.toUpperCase():'');
+async function login(e){e.preventDefault();U=$('lg').value.trim();try{await api('/users/me');localStorage.setItem('u',U);start()}catch(x){toast('User not found',1)}return false}
+async function register(){U=$('lg').value.trim();if(!U)return;try{await api('/users',{method:'POST',body:JSON.stringify({login:U})});localStorage.setItem('u',U);start()}catch(x){toast(x.message,1)}}
+function logout(){localStorage.removeItem('u');location.reload()}
+async function start(){$('login').classList.add('hide');$('app').classList.remove('hide');$('who').textContent=U;await loadWallets();loadTotal();loadOps()}
+async function loadWallets(){W=await api('/wallets');
+ $('wallets').innerHTML=W.map(w=>`<div class="w"><span>${w.name}</span><b>${fmt(w.balance,w.currency)}</b></div>`).join('')||'<span class="mu">No wallets</span>';
+ document.querySelectorAll('.wsel').forEach(s=>s.innerHTML=W.map(w=>`<option>${w.name}</option>`).join(''));
+ document.querySelectorAll('.wid').forEach(s=>s.innerHTML=W.map(w=>`<option value="${w.id}">${w.name} (${w.currency})</option>`).join(''));
+ $('fw').innerHTML='<option value="">All wallets</option>'+W.map(w=>`<option value="${w.id}">${w.name}</option>`).join('')}
+async function loadTotal(){try{$('total').textContent=fmt(await api('/total_balance?target_currency='+$('cur').value),$('cur').value)}catch(e){$('total').textContent='—';toast(e.message,1)}}
+async function loadOps(){const q=new URLSearchParams();if($('fw').value)q.set('wallet_id',$('fw').value);
+ if($('df').value)q.set('date_from',$('df').value+'T00:00:00');if($('dt').value)q.set('date_to',$('dt').value+'T23:59:59');
+ let ops;try{ops=await api('/operations?'+q)}catch(e){return toast(e.message,1)}
+ ops.sort((a,b)=>b.created_at.localeCompare(a.created_at));const wn=Object.fromEntries(W.map(w=>[w.id,w.name]));
+ $('ops').innerHTML=ops.map(o=>`<tr><td>${o.created_at.slice(0,16).replace('T',' ')}</td><td>${wn[o.wallet_id]||o.wallet_id}</td><td class="${o.type}">${o.type}</td><td>${o.category||''}</td>
+  <td style="text-align:right" class="${o.type}">${o.type==='income'?'+':o.type==='expense'?'−':''}${fmt(o.amount,o.currency)}</td></tr>`).join('')||'<tr><td colspan=5 class="mu">No operations</td></tr>';
+ const s=t=>ops.filter(o=>o.type===t).reduce((a,o)=>a+Number(o.amount),0);$('sIn').textContent=fmt(s('income'));$('sEx').textContent=fmt(s('expense'));
+ const days={};ops.forEach(o=>{if(o.type==='transfer')return;const d=o.created_at.slice(0,10);(days[d]??={income:0,expense:0})[o.type]+=Number(o.amount)});
+ const ks=Object.keys(days).sort();draw('c1','bar',ks,[{label:'Income',data:ks.map(k=>days[k].income),backgroundColor:'#1fa971'},{label:'Expense',data:ks.map(k=>days[k].expense),backgroundColor:'#e5484d'}]);
+ const cat={};ops.filter(o=>o.type==='expense').forEach(o=>{const k=o.category||'uncategorized';cat[k]=(cat[k]||0)+Number(o.amount)});
+ draw('c2','doughnut',Object.keys(cat),[{data:Object.values(cat)}])}
+function draw(id,type,labels,datasets){ch[id]?.destroy();ch[id]=new Chart($(id),{type,data:{labels,datasets},options:{plugins:{legend:{labels:{color:'#8b93a7'}}},scales:type==='bar'?{x:{ticks:{color:'#8b93a7'}},y:{ticks:{color:'#8b93a7'}}}:{}}})}
+async function mk(e,k){e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
+ try{if(k==='wallet')await api('/wallets',{method:'POST',body:JSON.stringify({name:f.name,initial_balance:f.initial_balance||0,currency:f.currency})});
+ else if(k==='op')await api('/operations/'+f.kind,{method:'POST',body:JSON.stringify({wallet_name:f.wallet_name,amount:f.amount,description:f.description||null})});
+ else await api('/operations/transfer',{method:'POST',body:JSON.stringify({from_wallet_id:+f.from_wallet_id,to_wallet_id:+f.to_wallet_id,amount:f.amount})});
+ toast('Done');e.target.reset();await loadWallets();loadTotal();loadOps()}catch(x){toast(x.message,1)}return false}
+if(U)api('/users/me').then(start).catch(()=>localStorage.removeItem('u'));
+</script></body></html>

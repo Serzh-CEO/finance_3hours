@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-
+from app.repository import wallets as repo
 from app.currency_enum import CurrencyEnum
 from app.dependency import get_db, get_current_user
 from app.models import User
@@ -25,3 +25,6 @@ def create_wallet(wallet: CreateWalletRequest, db: Session = Depends(get_db),
                 current_user: User = Depends(get_current_user)):
     return wallets_service.create_wallet(db,current_user,wallet)
 
+@router.get("/wallets", response_model=list[WalletResponse])
+def get_wallets(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return [WalletResponse.model_validate(w) for w in repo.get_all_wallets(db, current_user.id)]
